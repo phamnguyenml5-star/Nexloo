@@ -371,9 +371,26 @@ $('copyRules').addEventListener('click',async()=>{try{await navigator.clipboard.
 $('search').addEventListener('input',e=>{const q=e.target.value.toLowerCase();list.querySelectorAll('.contact').forEach(c=>c.style.display=c.textContent.toLowerCase().includes(q)?'flex':'none')});
 $('back').addEventListener('click',()=>app.classList.remove('show-chat'));
 $('myNameLabel').textContent=name;loadAccountAvatar();document.body.classList.toggle('monochrome-ui',localStorage.getItem('chatgo_monochrome_'+(user?.uid||'guest'))==='1');applyWallpaper(localStorage.getItem('chatgo_wallpaper')||'default');
+const NEXLOO_FIREBASE_CONFIG = {
+ apiKey: "AIzaSyCha4kpvDoTB936AGpp17Vi0NLRP13zGiY",
+ authDomain: "chillchat-79347.firebaseapp.com",
+ databaseURL: "https://chillchat-79347-default-rtdb.asia-southeast1.firebasedatabase.app",
+ projectId: "chillchat-79347",
+ storageBucket: "chillchat-79347.firebasestorage.app",
+ messagingSenderId: "406545923125",
+ appId: "1:406545923125:web:8d076a5cb6b9b9b265057c",
+ measurementId: "G-GCS8WQS00K"
+};
 const saved=localStorage.getItem('chillchat_firebase_config');
-if(saved){try{$('firebaseConfig').value=saved;connect(JSON.parse(saved))}catch{setStatus('error','Config không hợp lệ')}}
-else {setStatus('local','Chế độ thử trên máy này');switchRoom('');}
+try {
+ const cfg = saved ? JSON.parse(saved) : NEXLOO_FIREBASE_CONFIG;
+ $('firebaseConfig').value=JSON.stringify(cfg,null,2);
+ if(!saved) localStorage.setItem('chillchat_firebase_config',JSON.stringify(cfg));
+ connect(cfg);
+} catch(e) {
+ setStatus('error','Cấu hình Firebase không hợp lệ');
+ toast('Không đọc được cấu hình Firebase: '+(e.message||e));
+}
 })();
 </script>
 
