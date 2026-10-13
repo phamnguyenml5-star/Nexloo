@@ -140,7 +140,28 @@ let authMode='login';
 const roomsSeen=[];
 let storage=null;
 $('displayName').value=name;
-function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2800)}
+function toast(msg){
+ const t=document.getElementById('toast');
+ if(!t){
+  console.warn('[Nexloo]',msg);
+  let fallback=document.getElementById('nexlooToastFallback');
+  if(!fallback){
+   fallback=document.createElement('div');
+   fallback.id='nexlooToastFallback';
+   fallback.style.cssText='position:fixed;left:16px;right:16px;bottom:20px;z-index:999999;background:#24243a;color:white;padding:14px 16px;border-radius:12px;box-shadow:0 8px 30px #0003;font:14px/1.4 system-ui,sans-serif';
+   document.body.appendChild(fallback);
+  }
+  fallback.textContent=String(msg);
+  fallback.style.display='block';
+  clearTimeout(window.__nexlooToastTimer);
+  window.__nexlooToastTimer=setTimeout(()=>{fallback.style.display='none'},4000);
+  return;
+ }
+ t.textContent=String(msg);
+ t.classList.add('show');
+ try { clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2800); }
+ catch(e) { setTimeout(()=>t.classList.remove('show'),2800); }
+}
 function safe(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function slug(s){return String(s).toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48)||'phong-chung'}
 function time(ts){try{return new Date(ts||Date.now()).toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})}catch{return ''}}
@@ -361,5 +382,6 @@ else {setStatus('local','Chế độ thử trên máy này');switchRoom('');}
 <script>
 (()=>{const viewer=document.getElementById('chatImageViewer'),big=document.getElementById('chatImageViewerImg'),close=document.getElementById('chatImageViewerClose');if(!viewer||!big||!close)return;function hide(){viewer.classList.remove('open');big.removeAttribute('src');document.body.style.overflow=''}document.addEventListener('click',e=>{const img=e.target.closest('.bubble img');if(!img)return;e.preventDefault();e.stopPropagation();big.src=img.currentSrc||img.src;big.alt=img.alt||'Ảnh phóng to';viewer.classList.add('open')});close.addEventListener('click',hide);viewer.addEventListener('click',e=>{if(e.target===viewer)hide()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&viewer.classList.contains('open'))hide()})})();
 </script>
+<div id="toast" role="status" aria-live="polite" class="toast"></div>
 </body>
 </html>
