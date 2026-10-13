@@ -57,6 +57,8 @@ body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI"
 <aside class="sidebar">
   <div class="brand"><div class="logo" aria-label="Nexloo VN logo"><svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M7 10.5C7 7.46 9.46 5 12.5 5h14C29.54 5 32 7.46 32 10.5v10C32 23.54 29.54 26 26.5 26H19l-7.5 5v-5A4.5 4.5 0 0 1 7 21.5v-11Z" fill="white" fill-opacity=".98"/><path d="M13 11v10l8-10v10" stroke="#6257F6" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="29.5" cy="29.5" r="7.5" fill="#20D6C2" stroke="#fff" stroke-width="1.5"/><text x="29.5" y="32.2" text-anchor="middle" font-family="Arial,sans-serif" font-size="6.2" font-weight="900" fill="#12305A">VN</text></svg></div><span class="brand-name">Nexloo<span style="color:var(--purple)">.</span><span class="vn">VN</span></span></div>
   <button class="new-chat" id="addFriendBtn"><span style="font-size:20px">＋</span> Kết bạn</button>
+  <button type="button" id="friendRequestsToggle" style="width:100%;margin-top:7px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font-weight:700;text-align:left;cursor:pointer">👥 Yêu cầu kết bạn <span id="friendRequestsBadge" style="display:none;margin-left:6px;padding:2px 7px;border-radius:99px;background:#ef476f;color:white;font-size:11px"></span></button>
+  <div id="friendRequestsPanel" style="display:none;margin:7px 0 10px;padding:10px;border:1px solid var(--line);border-radius:14px;background:var(--panel)"><div id="friendRequestsList" style="font-size:12px;color:var(--muted)">Đang tải yêu cầu…</div></div>
   <div class="search"><span>⌕</span><input id="search" placeholder="Tìm bạn bè..." autocomplete="off"><button class="search-go" id="searchFriendBtn" title="Tìm tài khoản bằng email" aria-label="Tìm bạn">⌕</button></div>
   <div class="section-label">BẠN BÈ</div>
   <div class="section-label">CUỘC TRÒ CHUYỆN</div>
@@ -130,16 +132,6 @@ body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI"
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
 <script>
 (() => {
-const firebaseConfig = {
-  apiKey: "AIzaSyCha4kpvDoTB936AGpp17Vi0NLRP13zGiY",
-  authDomain: "chillchat-79347.firebaseapp.com",
-  databaseURL: "https://chillchat-79347-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "chillchat-79347",
-  storageBucket: "chillchat-79347.firebasestorage.app",
-  messagingSenderId: "406545923125",
-  appId: "1:406545923125:web:8d076a5cb6b9b9b265057c",
-  measurementId: "G-GCS8WQS00K"
-};
 const $=id=>document.getElementById(id);
 const app=$('app'), messages=$('messages'), list=$('contactList'), input=$('messageInput');
 let room='', user=null, db=null, auth=null, live=false, listener=null, demoMessages=[], toastTimer;
@@ -177,10 +169,104 @@ $('viewOtherProfileBtn').addEventListener('click',async()=>{const target=(roomsS
 let authSignupWallpaper='default';$('authWallpaperOptions').addEventListener('click',e=>{const b=e.target.closest('[data-auth-wallpaper]');if(!b)return;authSignupWallpaper=b.dataset.authWallpaper;$('authWallpaperOptions').querySelectorAll('[data-auth-wallpaper]').forEach(x=>x.classList.toggle('selected',x===b))});
 function normalizeNameKey(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,60)}
 async function indexAccount(uid,display,email){if(!db||!uid||!display)return;const key=normalizeNameKey(display);if(!key)return;const data={uid,name:display,email:(email||'').toLowerCase()};await db.ref('nameLookup/'+key+'/'+uid).set(data)}
-$('authSubmit').addEventListener('click',async()=>{if(!auth){toast('Mở ⚙ cài đặt và lưu Firebase config trước nhé.');$('authModal').classList.remove('open');openSettings();return}const email=$('authEmail').value.trim(),password=$('authPassword').value; if(!email||!password){toast('Nhập email và mật khẩu nhé.');return}if(password.length<6){toast('Mật khẩu phải có ít nhất 6 ký tự.');return}const btn=$('authSubmit');btn.disabled=true;try{let cred;if(authMode==='register'){cred=await auth.createUserWithEmailAndPassword(email,password);const display=($('authName').value.trim()||email.split('@')[0]).slice(0,32);await cred.user.updateProfile({displayName:display});name=display;localStorage.setItem('chatgo_name',name);const emailKey=email.trim().toLowerCase().replace(/[.#$\[\]@]/g,'_');try{await db.ref('users/'+cred.user.uid+'/profile').set({uid:cred.user.uid,name:display,email:email.trim().toLowerCase()});await db.ref('emailLookup/'+emailKey).set({uid:cred.user.uid,name:display});await indexAccount(cred.user.uid,display,email)}catch(profileErr){console.warn('Tài khoản tạo được nhưng chưa ghi hồ sơ/emailLookup. Kiểm tra Firebase Rules.',profileErr);toast('Tài khoản đã tạo; cần cập nhật Firebase Rules để bật tìm bạn.') }}else{cred=await auth.signInWithEmailAndPassword(email,password);name=cred.user.displayName||email.split('@')[0];localStorage.setItem('chatgo_name',name)}user=cred.user;try{await indexAccount(user.uid,name,user.email)}catch(indexErr){console.warn('Chưa tạo được chỉ mục tên hiển thị; kiểm tra Rules nameLookup.',indexErr)}live=true;loadAccountAvatar();$('authModal').classList.remove('open');$('myNameLabel').textContent=name;setStatus('ok','Đã đăng nhập');toast(authMode==='register'?'Tạo tài khoản thành công!':'Đăng nhập thành công!');await loadFriends();switchRoom(room)}catch(err){toast('Không đăng nhập được: '+(err.code==='auth/operation-not-allowed'?'Hãy bật Email/Password trong Firebase Authentication.':err.code==='auth/email-already-in-use'?'Email này đã đăng ký, hãy đăng nhập.':err.code==='auth/invalid-credential'?'Email hoặc mật khẩu không đúng.':err.message))}finally{btn.disabled=false}});
+$('authSubmit').addEventListener('click',async()=>{
+ if(!auth||!db){toast('Firebase chưa kết nối. Tải lại trang hoặc kiểm tra cấu hình.');return}
+ const email=$('authEmail').value.trim().toLowerCase(),password=$('authPassword').value;
+ if(!email||!password){toast('Nhập email và mật khẩu nhé.');return}
+ if(password.length<6){toast('Mật khẩu phải có ít nhất 6 ký tự.');return}
+ const btn=$('authSubmit');btn.disabled=true;const oldLabel=btn.textContent;btn.textContent=authMode==='register'?'Đang tạo tài khoản…':'Đang đăng nhập…';
+ try{
+  let cred,display='';
+  if(authMode==='register'){
+   cred=await auth.createUserWithEmailAndPassword(email,password);
+   display=($('authName').value.trim()||email.split('@')[0]).slice(0,32);
+   name=display;
+   try{await cred.user.updateProfile({displayName:display})}catch(profileUpdateErr){console.warn('Không cập nhật được displayName:',profileUpdateErr)}
+   localStorage.setItem('chatgo_name',display);
+   const emailKey=email.replace(/[.#$\[\]@]/g,'_');
+   // Profile/index writes are separate from Firebase Authentication account creation.
+   // A denied database write must not be reported as if account creation failed.
+   const writes=[
+    ['users/'+cred.user.uid+'/profile',{uid:cred.user.uid,name:display,email}],
+    ['emailLookup/'+emailKey,{uid:cred.user.uid,name:display}],
+    ['nameLookup/'+normalizeNameKey(display)+'/'+cred.user.uid,{uid:cred.user.uid,name:display,email}]
+   ];
+   const writeErrors=[];
+   for(const [path,value] of writes){try{await db.ref(path).set(value)}catch(e){console.warn('Profile write failed at '+path,e);writeErrors.push(path+': '+(e.code||e.message||'error'))}}
+   if(writeErrors.length){console.warn('Account created, some profile indexes failed:',writeErrors);toast('Tài khoản đã tạo! Một phần hồ sơ chưa lưu được; hãy kiểm tra Firebase Rules.')}
+  }else{
+   cred=await auth.signInWithEmailAndPassword(email,password);
+   name=cred.user.displayName||localStorage.getItem('chatgo_name_'+cred.user.uid)||email.split('@')[0];
+   localStorage.setItem('chatgo_name',name);
+  }
+  user=cred.user;live=true;loadAccountAvatar();$('authModal').classList.remove('open');$('myNameLabel').textContent=name;setStatus('ok','Đã đăng nhập');
+  if(authMode!=='register')toast('Đăng nhập thành công!');
+  else toast('Tạo tài khoản thành công!');
+  try{await indexAccount(user.uid,name,user.email)}catch(indexErr){console.warn('Name lookup index failed:',indexErr)}
+  await loadFriends();switchRoom(room);
+ }catch(err){
+  console.error('Auth form error:',err);
+  const code=err&&err.code||'';
+  const messages={
+   'auth/operation-not-allowed':'Firebase chưa bật Email/Password. Vào Authentication → Sign-in method để bật.',
+   'auth/email-already-in-use':'Email này đã đăng ký. Hãy chuyển sang Đăng nhập.',
+   'auth/invalid-email':'Email không hợp lệ. Kiểm tra lại địa chỉ email.',
+   'auth/weak-password':'Mật khẩu quá yếu; hãy dùng ít nhất 6 ký tự.',
+   'auth/invalid-credential':'Email hoặc mật khẩu không đúng.',
+   'auth/user-not-found':'Chưa có tài khoản này. Hãy chọn Đăng ký.',
+   'auth/wrong-password':'Mật khẩu không đúng.',
+   'auth/network-request-failed':'Lỗi mạng; kiểm tra kết nối rồi thử lại.',
+   'auth/too-many-requests':'Thử quá nhiều lần. Đợi một lúc rồi thử lại.',
+   'PERMISSION_DENIED':'Firebase Rules đang chặn thao tác dữ liệu.'
+  };
+  toast((authMode==='register'?'Đăng ký thất bại: ':'Đăng nhập thất bại: ')+(messages[code]||((code?code+' — ':'')+(err.message||'Lỗi không xác định'))));
+ }finally{btn.disabled=false;btn.textContent=oldLabel}
+});
 function watchFriendPresence(){if(!db||!user)return;roomsSeen.forEach(r=>{if(!r.uid)return;db.ref('users/'+r.uid+'/presence').on('value',snap=>{r.online=!!(snap.val()&&snap.val().online);const el=list.querySelector('[data-room="'+r.id+'"]');if(el){const av=el.querySelector('.avatar');let dot=av.querySelector('.online,.offline');if(!dot){dot=document.createElement('span');av.appendChild(dot)}dot.className=r.online?'online':'offline';dot.title=r.online?'Đang hoạt động':'Đang ngoại tuyến'}})})}
 function watchUnreadCounts(){if(!db||!user)return;roomsSeen.forEach(r=>{const path='directMessages/'+r.id;db.ref(path+'/messages').limitToLast(150).on('value',snap=>{db.ref(path+'/readBy/'+user.uid).once('value').then(rs=>{const lastRead=Number(rs.val()||0);let count=0;snap.forEach(child=>{const m=child.val();if(m&&m.uid!==user.uid&&Number(m.createdAt||0)>lastRead)count++});r.unread=(r.id===room)?0:count;const el=list.querySelector('[data-room="'+r.id+'"]');if(el){const av=el.querySelector('.avatar');let badge=av.querySelector('.unread-badge');if(r.unread){if(!badge){badge=document.createElement('span');badge.className='unread-badge';badge.title='Tin nhắn chưa đọc';av.appendChild(badge)}badge.textContent=r.unread>99?'99+':String(r.unread);const preview=el.querySelector('.preview');if(preview)preview.textContent='🔴 '+r.unread+' tin nhắn chưa đọc'}else{if(badge)badge.remove();const preview=el.querySelector('.preview');if(preview)preview.textContent='Tin nhắn 1–1'}}}).catch(()=>{})})})}
-async function loadFriends(){if(!db||!user)return;try{const snap=await db.ref('friends/'+user.uid).once('value');roomsSeen.length=0;const data=snap.val()||{};Object.keys(data).forEach(uid=>{const f=data[uid];roomsSeen.push({id:[user.uid,uid].sort().join('__'),name:f.name||'Bạn bè',emoji:f.avatarEmoji||'🙂',photo:f.avatarPhoto||'',uid});});renderRooms();watchFriendPresence();watchUnreadCounts();const req=await db.ref('friendRequests/'+user.uid).once('value');const dataReq=req.val()||{};for(const uid of Object.keys(dataReq)){const r=dataReq[uid];if(r.incoming&&confirm((r.name||'Một người')+' muốn kết bạn. Chấp nhận?')){const mine={uid:user.uid,name:name,email:user.email||'',avatarEmoji:chosenEmoji,avatarPhoto:chosenAvatarPhoto||''};const theirs={uid,name:r.name||'Bạn bè',email:r.email||'',avatarEmoji:r.avatarEmoji||'🙂',avatarPhoto:r.avatarPhoto||''};const upd={};upd['friends/'+user.uid+'/'+uid]=theirs;upd['friends/'+uid+'/'+user.uid]=mine;upd['friendRequests/'+user.uid+'/'+uid]=null;upd['friendRequests/'+uid+'/'+user.uid]=null;await db.ref().update(upd);} }const fresh=await db.ref('friends/'+user.uid).once('value');roomsSeen.length=0;Object.entries(fresh.val()||{}).forEach(([uid,f])=>roomsSeen.push({id:[user.uid,uid].sort().join('__'),name:f.name||'Bạn bè',emoji:f.avatarEmoji||'🙂',photo:f.avatarPhoto||'',uid}));renderRooms();watchFriendPresence();watchUnreadCounts();}catch(e){console.warn(e)}}
+let friendRequestsListener=null;
+function renderFriendRequests(data){
+ const list=$('friendRequestsList'),badge=$('friendRequestsBadge');if(!list)return;
+ const rows=Object.entries(data||{}).filter(([uid,r])=>uid&&r&&r.incoming&&uid!==user?.uid);
+ if(badge){badge.textContent=rows.length;badge.style.display=rows.length?'inline-block':'none'}
+ list.innerHTML='';
+ if(!rows.length){list.textContent='Chưa có lời mời kết bạn nào.';return}
+ rows.forEach(([uid,r])=>{
+  const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)';
+  const avatar=document.createElement('span');avatar.textContent=r.avatarEmoji||'🙂';avatar.style.fontSize='22px';
+  const details=document.createElement('div');details.style.cssText='min-width:0;flex:1';
+  const title=document.createElement('div');title.textContent=r.name||'Người dùng Nexloo';title.style.cssText='font-weight:700;color:var(--ink);overflow-wrap:anywhere';
+  const sub=document.createElement('div');sub.textContent='Muốn kết bạn với bạn';sub.style.cssText='font-size:10px;color:var(--muted)';details.append(title,sub);
+  const yes=document.createElement('button');yes.type='button';yes.textContent='Đồng ý';yes.style.cssText='border:0;border-radius:8px;padding:7px 9px;background:var(--purple);color:white;font-weight:700;cursor:pointer';
+  yes.onclick=async()=>{if(!db||!user){toast('Đăng nhập lại rồi thử nhé.');return}yes.disabled=true;yes.textContent='Đang xử lý…';try{
+   const check=await db.ref('friendRequests/'+user.uid+'/'+uid).once('value');
+   if(!check.exists()||!check.val()?.incoming){toast('Lời mời này không còn tồn tại. Đang làm mới danh sách.');await loadFriends();return}
+   const mine={uid:user.uid,name:name,email:user.email||'',avatarEmoji:chosenEmoji,avatarPhoto:chosenAvatarPhoto||''};
+   const theirs={uid,name:r.name||'Bạn bè',email:r.email||'',avatarEmoji:r.avatarEmoji||'🙂',avatarPhoto:r.avatarPhoto||''};
+   const updates={};updates['friends/'+user.uid+'/'+uid]=theirs;updates['friends/'+uid+'/'+user.uid]=mine;
+   updates['friendRequests/'+user.uid+'/'+uid]=null;updates['friendRequests/'+uid+'/'+user.uid]=null;
+   await db.ref().update(updates);
+   const verify=await db.ref('friends/'+user.uid+'/'+uid).once('value');
+   if(!verify.exists())throw new Error('Firebase chưa lưu quan hệ bạn bè');
+   toast('Đã chấp nhận lời mời kết bạn!');await loadFriends();
+  }catch(e){yes.disabled=false;yes.textContent='Đồng ý';const detail=e?.code==='PERMISSION_DENIED'?'Firebase Rules đang chặn quyền ghi friends hoặc friendRequests.':(e?.message||'Lỗi không xác định');toast('Không chấp nhận được: '+detail)}};
+  const no=document.createElement('button');no.type='button';no.textContent='Từ chối';no.style.cssText='border:1px solid var(--line);border-radius:8px;padding:7px 8px;background:transparent;color:var(--ink);font-size:11px;cursor:pointer';
+  no.onclick=async()=>{no.disabled=true;try{await db.ref('friendRequests/'+user.uid+'/'+uid).remove();toast('Đã từ chối lời mời.');await loadFriends()}catch(e){no.disabled=false;toast('Không từ chối được: '+e.message)}};
+  row.append(avatar,details,yes,no);list.append(row);
+ });
+}
+$('friendRequestsToggle').addEventListener('click',()=>{const panel=$('friendRequestsPanel');panel.style.display=panel.style.display==='none'?'block':'none'});
+async function loadFriends(){
+ if(!db||!user)return;
+ try{
+  const snap=await db.ref('friends/'+user.uid).once('value');roomsSeen.length=0;
+  Object.entries(snap.val()||{}).forEach(([uid,f])=>roomsSeen.push({id:[user.uid,uid].sort().join('__'),name:f.name||'Bạn bè',emoji:f.avatarEmoji||'🙂',photo:f.avatarPhoto||'',uid}));
+  renderRooms();watchFriendPresence();watchUnreadCounts();
+  const reqRef=db.ref('friendRequests/'+user.uid);
+  if(friendRequestsListener)reqRef.off('value',friendRequestsListener);
+  friendRequestsListener=reqRef.on('value',snap=>renderFriendRequests(snap.val()||{}));
+ }catch(e){console.warn('loadFriends:',e);toast('Không tải được bạn bè: '+e.message)}
+}
 $('messageForm').addEventListener('submit',async e=>{e.preventDefault();const text=input.value.trim();if(!text)return;if(!room){toast('Chọn một người bạn trước nhé.');return}if(isBlocked()){const failed={text,uid:user?.uid||'local-'+name,name:name,createdAt:Date.now(),emoji:'😎',failed:true};const empty=messages.querySelector('.empty-state');if(empty)empty.remove();renderMessage(failed);scrollBottom();input.value='';toast('Tin nhắn không gửi được vì cuộc trò chuyện đang bị chặn.');return}if(text.length>1500){toast('Tin nhắn tối đa 1500 ký tự.');return}const msg={text,uid:user?.uid||'local-'+name,name:name,createdAt:Date.now(),emoji:'😎'};if(live&&db&&user){$('sendBtn').disabled=true;try{await db.ref('directMessages/'+room+'/messages').push(msg);input.value=''}catch(err){toast('Gửi thất bại: '+err.message)}finally{$('sendBtn').disabled=false}}else{msg.room=room;demoMessages.push(msg);const empty=messages.querySelector('.empty-state');if(empty)empty.remove();renderMessage(msg);scrollBottom();input.value='';toast('Tin nhắn cục bộ — chưa gửi qua Internet') }});
 const personWallpapers={default:'radial-gradient(ellipse at 50% 0%,#faf9ff 0%,#fff 58%)',sunset:'linear-gradient(135deg,#ffe0d2,#fff1c9,#f7d9ff)',ocean:'linear-gradient(135deg,#c9f0ff,#e2e8ff,#fff)',forest:'linear-gradient(135deg,#d9f7e7,#f2ffe7,#fff)',night:'linear-gradient(135deg,#262344,#46436e,#34324f)',pink:'linear-gradient(135deg,#ffe1ef,#f8e5ff,#fff)'};
 const defaultQuickIcons=['❤️'];let pendingPersonWallpaper='default',pendingPersonImage='',pendingQuickIcons=[...defaultQuickIcons],pendingNickname='';
@@ -216,8 +302,8 @@ let foundFriend=null;$('friendClose').addEventListener('click',()=>$('friendModa
 $('friendSearchBtn').addEventListener('click',async()=>{if(!live||!db||!user){toast('Đăng nhập trước nhé.');return}const query=$('friendSearchEmail').value.trim();if(!query){toast(friendSearchMode==='name'?'Nhập tên hiển thị nhé.':'Nhập email nhé.');return}$('friendSearchResult').textContent='Đang tìm...';$('friendRequestBtn').style.display='none';foundFriend=null;try{let matches=[];if(friendSearchMode==='name'&&!query.includes('@')){const key=normalizeNameKey(query);const snap=await db.ref('nameLookup/'+key).once('value');const value=snap.val()||{};matches=Object.values(value).filter(x=>x&&x.uid&&normalizeNameKey(x.name)===key)}else{friendSearchMode='email';matches=[]}
 if(friendSearchMode==='email'||query.includes('@')){const email=query.toLowerCase();if(!email.includes('@')){$('friendSearchResult').textContent='Nhập email hợp lệ nhé.';return}const key=email.replace(/[.#$\[\]@]/g,'_');const snap=await db.ref('emailLookup/'+key).once('value');const value=snap.val();if(value&&value.uid)matches=[value]}
 if(!matches.length){if(friendSearchMode==='name'&&!query.includes('@')){$('friendSearchResult').textContent='Chưa có chỉ mục cho tên này. Bạn ấy cần đăng nhập lại Nexloo VN hoặc mở Trang cá nhân → Lưu hồ sơ để đồng bộ tên; nếu vẫn chưa thấy, nhập email để tìm chính xác.';friendSearchMode='email';$('friendSearchEmail').placeholder='Nhập email đã đăng ký Nexloo VN';$('friendSearchBtn').textContent='Tìm bằng email';return}$('friendSearchResult').textContent='Không tìm thấy tài khoản bằng email. Người đó cần đăng ký Nexloo VN trước.';return}
-const others=matches.filter(x=>x.uid!==user.uid);if(!others.length){$('friendSearchResult').textContent='Đây là tài khoản của chính bạn 😅';return}if(others.length>1){$('friendSearchResult').textContent='Có nhiều người trùng tên. Hãy nhập email để tìm chính xác nhé.';friendSearchMode='email';$('friendSearchEmail').placeholder='Nhập email đã đăng ký Nexloo VN';$('friendSearchBtn').textContent='Tìm bằng email';return}foundFriend=others[0];const existing=roomsSeen.some(r=>r.uid===foundFriend.uid);$('friendSearchResult').textContent=(foundFriend.name||'Người dùng Nexloo VN')+(foundFriend.email?' · '+foundFriend.email:'')+(existing?' · Đã là bạn bè':'');$('friendRequestBtn').style.display=existing?'none':'inline-block'}catch(e){$('friendSearchResult').textContent='Không tìm được: '+e.message+' — kiểm tra Firebase Rules của nameLookup/emailLookup.'}});
-$('friendRequestBtn').addEventListener('click',async()=>{if(!foundFriend||!user||!db)return;try{await db.ref('friendRequests/'+foundFriend.uid+'/'+user.uid).set({uid:user.uid,name:name,email:user.email||'',avatarEmoji:chosenEmoji,avatarPhoto:chosenAvatarPhoto||'',createdAt:Date.now(),incoming:true});toast('Đã gửi lời mời kết bạn!');$('friendModal').classList.remove('open')}catch(e){toast('Không gửi được lời mời: '+e.message+' — cần cập nhật Firebase Rules.')}});
+const others=matches.filter(x=>x.uid!==user.uid);if(!others.length){$('friendSearchResult').textContent='Đây là tài khoản của chính bạn 😅';return}if(others.length>1){$('friendSearchResult').textContent='Có nhiều người trùng tên. Hãy nhập email để tìm chính xác nhé.';friendSearchMode='email';$('friendSearchEmail').placeholder='Nhập email đã đăng ký Nexloo VN';$('friendSearchBtn').textContent='Tìm bằng email';return}foundFriend=others[0];const existing=roomsSeen.some(r=>r.uid===foundFriend.uid);let pending=false;if(!existing){const ps=await db.ref('friendRequests/'+foundFriend.uid+'/'+user.uid).once('value');pending=ps.exists()&&!!ps.val()?.incoming}$('friendSearchResult').textContent=(foundFriend.name||'Người dùng Nexloo VN')+(foundFriend.email?' · '+foundFriend.email:'')+(existing?' · Đã là bạn bè':pending?' · Đã gửi lời mời':'');$('friendRequestBtn').textContent=pending?'✓ Đã gửi lời mời':'+ Gửi lời mời';$('friendRequestBtn').disabled=existing||pending;$('friendRequestBtn').style.display=existing?'none':'inline-block'}catch(e){$('friendSearchResult').textContent='Không tìm được: '+e.message+' — kiểm tra Firebase Rules của nameLookup/emailLookup.'}});
+$('friendRequestBtn').addEventListener('click',async()=>{if(!foundFriend||!user||!db)return;try{try{const existing=roomsSeen.some(r=>r.uid===foundFriend.uid);if(existing){toast('Hai người đã là bạn bè rồi.');return}const pending=await db.ref('friendRequests/'+foundFriend.uid+'/'+user.uid).once('value');if(pending.exists()&&pending.val()?.incoming){$('friendRequestBtn').textContent='✓ Đã gửi lời mời';$('friendRequestBtn').disabled=true;toast('Lời mời đã được gửi trước đó.');return}await db.ref('friendRequests/'+foundFriend.uid+'/'+user.uid).set({uid:user.uid,name:name,email:user.email||'',avatarEmoji:chosenEmoji,avatarPhoto:chosenAvatarPhoto||'',createdAt:Date.now(),incoming:true});$('friendRequestBtn').textContent='✓ Đã gửi lời mời';$('friendRequestBtn').disabled=true;$('friendSearchResult').textContent=(foundFriend.name||'Người dùng Nexloo VN')+' · Đã gửi lời mời';toast('✓ Đã gửi lời mời kết bạn!')}catch(e){toast(e?.code==='PERMISSION_DENIED'?'Firebase Rules đang chặn gửi lời mời kết bạn.':'Gửi lời mời thất bại: '+(e?.message||'lỗi không rõ'))}}catch(e){toast('Không gửi được lời mời: '+e.message+' — cần cập nhật Firebase Rules.')}});
 // Real audio/video calling: WebRTC media + Firebase Realtime Database signaling.
 let pc=null, localStream=null, activeCallId=null, activeCallRole=null, callMode='audio', callListener=null, incomingCallsListener=null, candidateListeners=[];
 const rtcConfig={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]};
@@ -264,8 +350,9 @@ $('copyRules').addEventListener('click',async()=>{try{await navigator.clipboard.
 $('search').addEventListener('input',e=>{const q=e.target.value.toLowerCase();list.querySelectorAll('.contact').forEach(c=>c.style.display=c.textContent.toLowerCase().includes(q)?'flex':'none')});
 $('back').addEventListener('click',()=>app.classList.remove('show-chat'));
 $('myNameLabel').textContent=name;loadAccountAvatar();document.body.classList.toggle('monochrome-ui',localStorage.getItem('chatgo_monochrome_'+(user?.uid||'guest'))==='1');applyWallpaper(localStorage.getItem('chatgo_wallpaper')||'default');
-$('firebaseConfig').value=JSON.stringify(firebaseConfig,null,2);
-connect(firebaseConfig);
+const saved=localStorage.getItem('chillchat_firebase_config');
+if(saved){try{$('firebaseConfig').value=saved;connect(JSON.parse(saved))}catch{setStatus('error','Config không hợp lệ')}}
+else {setStatus('local','Chế độ thử trên máy này');switchRoom('');}
 })();
 </script>
 
